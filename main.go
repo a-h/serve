@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 )
 
 var flagDir = flag.String("dir", ".", "Directory to serve.")
@@ -17,7 +18,11 @@ func main() {
 		flag.PrintDefaults()
 		return
 	}
-	http.Handle("/", http.FileServer(http.Dir(*flagDir)))
+	fs := http.FileServer(http.Dir(*flagDir))
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Printf("%s %v %v\n", time.Now().Format(time.RFC3339), r.Method, r.URL.String())
+		fs.ServeHTTP(w, r)
+	})
 	fmt.Printf("Serving %q on %s\n", *flagDir, *flagAddr)
 	if err := http.ListenAndServe(*flagAddr, nil); err != nil {
 		fmt.Printf("Error: %v\n", err)
