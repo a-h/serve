@@ -15,6 +15,7 @@ var flagDir = flag.String("dir", ".", "Directory to serve.")
 var flagAddr = flag.String("addr", ":8080", "Address to serve on.")
 var flagCrt = flag.String("crt", "", "Path to crt file.")
 var flagKey = flag.String("key", "", "Path to key file.")
+var flagRemoteAddr = flag.Bool("remote-addr", false, "Log remote address.")
 var flagHelp = flag.Bool("help", false, "Print help.")
 
 func main() {
@@ -32,7 +33,17 @@ func main() {
 	server := &http.Server{
 		Addr: *flagAddr,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			fmt.Printf("%s %v %v\n", time.Now().Format(time.RFC3339), r.Method, r.URL.String())
+			var sb strings.Builder
+			sb.WriteString(time.Now().Format(time.RFC3339))
+			sb.WriteString(" ")
+			sb.WriteString(r.Method)
+			sb.WriteString(" ")
+			sb.WriteString(r.URL.String())
+			if *flagRemoteAddr {
+				sb.WriteString(" ")
+				sb.WriteString(r.RemoteAddr)
+			}
+			fmt.Println(sb.String())
 			fs.ServeHTTP(w, r)
 		}),
 		ReadTimeout:    5 * time.Second,
