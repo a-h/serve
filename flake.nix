@@ -2,7 +2,7 @@
   description = "serve";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/23.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/25.05";
   };
 
   outputs = { self, nixpkgs }:
@@ -24,7 +24,7 @@
       });
 
       # Build for the app.
-      serve = pkgs: pkgs.buildGo121Module {
+      serve = pkgs: pkgs.buildGoModule {
         name = "serve";
         src = ./.;
         vendorHash = null; # Use vendored deps.
@@ -41,7 +41,7 @@
         ({ system, pkgs }:
           pkgs.mkShell {
             buildInputs = [
-              pkgs.go_1_21
+              pkgs.go
             ];
           });
     };
