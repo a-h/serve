@@ -2,15 +2,16 @@ package handlers
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path"
 	"strings"
 )
 
-func NewFileHandler(dir string, isWritable bool) (fh *FileHandler, closer func() error, err error) {
+func NewFileHandler(dir string, readOnly bool) (fh *FileHandler, closer func() error, err error) {
 	fh = &FileHandler{
-		IsWritable: isWritable,
+		IsReadOnly: readOnly,
 		fileServer: http.FileServer(http.Dir(dir)),
 	}
 	fh.rootedFileSystem, err = os.OpenRoot(dir)
@@ -24,7 +25,7 @@ func NewFileHandler(dir string, isWritable bool) (fh *FileHandler, closer func()
 }
 
 type FileHandler struct {
-	IsWritable       bool
+	IsReadOnly       bool
 	fileServer       http.Handler
 	rootedFileSystem *os.Root
 }
@@ -55,7 +56,7 @@ func (h *FileHandler) cleanPath(p string) string {
 }
 
 func (h *FileHandler) Put(w http.ResponseWriter, r *http.Request) {
-	if !h.IsWritable {
+	if h.IsReadOnly {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -64,6 +65,13 @@ func (h *FileHandler) Put(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid file path", http.StatusBadRequest)
 		return
 	}
+	if r.Body == nil {
+		http.Error(w, "No file content provided", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	// Create the file.
 	err := h.rootedFileSystem.MkdirAll(path.Dir(cleaned), 0755)
 	if err != nil {
 		fmt.Printf(" - failed to create directories: %v\n", err)
@@ -77,17 +85,52 @@ func (h *FileHandler) Put(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer f.Close()
-	_, err = f.ReadFrom(r.Body)
+
+	// Read the file content from the request body.
+	reader, err := h.getReader(r)
+	if err != nil {
+		fmt.Printf(" - failed to get file reader: %v\n", err)
+		http.Error(w, "failed to read file content", http.StatusBadRequest)
+		return
+	}
+
+	_, err = f.ReadFrom(reader)
 	if err != nil {
 		fmt.Printf(" - failed to write file: %v\n", err)
 		http.Error(w, "failed to write file", http.StatusInternalServerError)
 		return
 	}
+
 	w.WriteHeader(http.StatusCreated)
 }
 
+func (h *FileHandler) getReader(r *http.Request) (io.Reader, error) {
+	isMultipart := strings.Contains(r.Header.Get("Content-Type"), "multipart/form-data")
+	if !isMultipart {
+		return r.Body, nil
+	}
+	reader, err := r.MultipartReader()
+	if err != nil {
+		return nil, err
+	}
+loop:
+	for {
+		part, err := reader.NextPart()
+		if err != nil {
+			if err == io.EOF {
+				break loop
+			}
+			return nil, err
+		}
+		if part.FormName() == "file" {
+			return part, nil
+		}
+	}
+	return nil, fmt.Errorf("file part not found in multipart form data")
+}
+
 func (h *FileHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	if !h.IsWritable {
+	if h.IsReadOnly {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}

@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"bytes"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -25,8 +27,8 @@ func TestFileHandler(t *testing.T) {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	// Create a new FileHandler, in read only mode initially.
-	fh, closer, err := NewFileHandler(dir, false)
+	// Create a new FileHandler, in read only mode.
+	fh, closer, err := NewFileHandler(dir, true)
 	if err != nil {
 		t.Fatalf("Failed to create FileHandler: %v", err)
 	}
@@ -49,7 +51,7 @@ func TestFileHandler(t *testing.T) {
 	})
 
 	// Update the FileHandler to be writable and test writing a new file.
-	fh.IsWritable = true
+	fh.IsReadOnly = false
 	t.Run("Can PUT when writable", func(t *testing.T) {
 		testWrite(t, fh, http.MethodPut, "/newfile.txt", "New content", http.StatusCreated)
 		testGet(t, fh, "/newfile.txt", http.StatusOK, "New content")
@@ -72,6 +74,10 @@ func TestFileHandler(t *testing.T) {
 	t.Run("Can create files in subdirectories", func(t *testing.T) {
 		testWrite(t, fh, http.MethodPut, "/subdir/newfile.txt", "Subdirectory content", http.StatusCreated)
 		testGet(t, fh, "/subdir/newfile.txt", http.StatusOK, "Subdirectory content")
+	})
+	t.Run("Can upload multipart form file", func(t *testing.T) {
+		testMultipartUpload(t, fh, "/multipart.txt", "Multipart content", http.StatusCreated)
+		testGet(t, fh, "/multipart.txt", http.StatusOK, "Multipart content")
 	})
 }
 
@@ -96,6 +102,30 @@ func testGet(t *testing.T, fh *FileHandler, urlPath string, expectedStatus int, 
 
 func testWrite(t *testing.T, fh *FileHandler, method string, urlPath string, body string, expectedStatus int) {
 	req := httptest.NewRequest(method, urlPath, io.NopCloser(strings.NewReader(body)))
+	w := httptest.NewRecorder()
+	fh.ServeHTTP(w, req)
+
+	resp := w.Result()
+	if resp.StatusCode != expectedStatus {
+		t.Errorf("Expected status %d, got %d", expectedStatus, resp.StatusCode)
+	}
+}
+
+func testMultipartUpload(t *testing.T, fh *FileHandler, urlPath string, fileContent string, expectedStatus int) {
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("file", "upload.txt")
+	if err != nil {
+		t.Fatalf("Failed to create form file: %v", err)
+	}
+	_, err = part.Write([]byte(fileContent))
+	if err != nil {
+		t.Fatalf("Failed to write to form file: %v", err)
+	}
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, urlPath, body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
 	w := httptest.NewRecorder()
 	fh.ServeHTTP(w, req)
 

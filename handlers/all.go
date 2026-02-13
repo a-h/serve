@@ -4,16 +4,18 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/a-h/serve/config"
 )
 
-func Create(dir string, logRemoteAddr bool, isWritable bool, auth string) (h http.Handler, closer func() error, err error) {
-	handler, closer, err := NewFileHandler(dir, isWritable)
+func Create(conf *config.Config) (h http.Handler, closer func() error, err error) {
+	handler, closer, err := NewFileHandler(conf.Dir, conf.ReadOnly)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create file handler: %w", err)
 	}
-	withLogging := NewLoggingMiddleware(logRemoteAddr, handler)
-	if auth != "" {
-		parts := strings.SplitN(auth, ":", 2)
+	withLogging := NewLoggingMiddleware(conf.LogRemoteAddr, handler)
+	if conf.Auth != "" {
+		parts := strings.SplitN(conf.Auth, ":", 2)
 		if len(parts) != 2 {
 			return nil, closer, fmt.Errorf("-auth must be in the format username:password")
 		}

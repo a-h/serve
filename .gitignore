@@ -1,3 +1,5 @@
-serve
-result
+/serve
+/serve.tar
+/result
 /coverage.out
+/upload.txt

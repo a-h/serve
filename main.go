@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/tls"
-	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -10,30 +9,28 @@ import (
 	"strings"
 	"time"
 
+	"github.com/a-h/serve/config"
 	"github.com/a-h/serve/handlers"
 )
 
-var flagDir = flag.String("dir", ".", "Directory to serve.")
-var flagAddr = flag.String("addr", ":8080", "Address to serve on.")
-var flagCrt = flag.String("crt", "", "Path to crt file.")
-var flagKey = flag.String("key", "", "Path to key file.")
-var flagRemoteAddr = flag.Bool("remote-addr", false, "Log remote address.")
-var flagHelp = flag.Bool("help", false, "Print help.")
-var flagWritable = flag.Bool("writable", false, "Allow POST, PUT, DELETE methods.")
-var flagAuth = flag.String("auth", "", "Username:Password for basic auth, no auth if not set.")
-
 func main() {
-	flag.Parse()
-	if *flagHelp {
-		flag.PrintDefaults()
-		return
-	}
-	if *flagCrt != "" && *flagKey == "" || *flagCrt == "" && *flagKey != "" {
-		fmt.Println("Error: -crt and -key must be used together.")
+	conf, err := config.New()
+	if err != nil {
+		fmt.Printf("Error parsing config: %v\n", err)
 		os.Exit(1)
 	}
 
-	handler, closer, err := handlers.Create(*flagDir, *flagRemoteAddr, *flagWritable, *flagAuth)
+	if conf.Help {
+		conf.FlagSet.PrintDefaults()
+		return
+	}
+
+	if err = conf.Validate(); err != nil {
+		fmt.Println(err.Error())
+		os.Exit(1)
+	}
+
+	handler, closer, err := handlers.Create(conf)
 	if err != nil {
 		fmt.Printf("Error creating handler: %v\n", err)
 		os.Exit(1)
@@ -41,7 +38,7 @@ func main() {
 	defer closer()
 
 	server := &http.Server{
-		Addr:           *flagAddr,
+		Addr:           conf.Addr,
 		Handler:        handler,
 		ReadTimeout:    5 * time.Second,
 		WriteTimeout:   10 * time.Second,
@@ -52,22 +49,22 @@ func main() {
 	}
 	listen := server.ListenAndServe
 
-	serveTLS := *flagCrt != "" && *flagKey != ""
+	serveTLS := conf.Crt != "" && conf.Key != ""
 	if serveTLS {
 		// Check that we're not attempting to serve the key and crt files.
-		absCrt, err := filepath.Abs(*flagCrt)
+		absCrt, err := filepath.Abs(conf.Crt)
 		if err != nil {
-			fmt.Printf("Failed to get absolute path of %q: %v\n", *flagCrt, err)
+			fmt.Printf("Failed to get absolute path of %q: %v\n", conf.Crt, err)
 			os.Exit(1)
 		}
-		absKey, err := filepath.Abs(*flagKey)
+		absKey, err := filepath.Abs(conf.Key)
 		if err != nil {
-			fmt.Printf("Failed to get absolute path of %q: %v\n", *flagKey, err)
+			fmt.Printf("Failed to get absolute path of %q: %v\n", conf.Key, err)
 			os.Exit(1)
 		}
-		absDir, err := filepath.Abs(*flagDir)
+		absDir, err := filepath.Abs(conf.Dir)
 		if err != nil {
-			fmt.Printf("Failed to get absolute path of %q: %v\n", *flagDir, err)
+			fmt.Printf("Failed to get absolute path of %q: %v\n", conf.Dir, err)
 			os.Exit(1)
 		}
 		if strings.HasPrefix(absCrt, absDir) || strings.HasPrefix(absKey, absDir) {
@@ -76,11 +73,11 @@ func main() {
 		}
 		// Switch to TLS mode.
 		listen = func() error {
-			return server.ListenAndServeTLS(*flagCrt, *flagKey)
+			return server.ListenAndServeTLS(conf.Crt, conf.Key)
 		}
 	}
 
-	fmt.Printf("Serving %q on %s\n", *flagDir, *flagAddr)
+	fmt.Print(conf.String())
 	if err := listen(); err != nil {
 		fmt.Printf("Error: %v\n", err)
 		os.Exit(1)
