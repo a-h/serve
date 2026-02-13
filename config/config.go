@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 )
 
@@ -18,6 +17,7 @@ func New() (c *Config, err error) {
 		LogRemoteAddr: false,
 		ReadOnly:      true,
 		Auth:          "",
+		LogFormat:     "text",
 		Help:          false,
 	}
 
@@ -32,6 +32,7 @@ func New() (c *Config, err error) {
 	conf.FlagSet.DurationVar(&conf.ReadTimeout, "read-timeout", 24*time.Hour, "Maximum duration for reading the entire request, including the body. (Env: SERVE_READ_TIMEOUT)")
 	conf.FlagSet.DurationVar(&conf.ReadHeaderTimeout, "read-header-timeout", 5*time.Second, "Amount of time allowed to read request headers. (Env: SERVE_READ_HEADER_TIMEOUT)")
 	conf.FlagSet.DurationVar(&conf.WriteTimeout, "write-timeout", 12*time.Hour, "Maximum duration before timing out writes of the response. (Env: SERVE_WRITE_TIMEOUT)")
+	conf.FlagSet.StringVar(&conf.LogFormat, "log-format", conf.LogFormat, "Log format: text or json. (Env: SERVE_LOG_FORMAT)")
 	conf.FlagSet.BoolVar(&conf.Help, "help", conf.Help, "Print help.")
 	if err = conf.FlagSet.Parse(os.Args[1:]); err != nil {
 		return nil, err
@@ -72,8 +73,23 @@ func New() (c *Config, err error) {
 	if err != nil {
 		errs = append(errs, fmt.Errorf("invalid SERVE_WRITE_TIMEOUT: %w", err))
 	}
+	conf.LogFormat, err = parseLogFormat("SERVE_LOG_FORMAT", conf.LogFormat)
+	if err != nil {
+		errs = append(errs, fmt.Errorf("invalid SERVE_LOG_FORMAT: %w", err))
+	}
 
 	return conf, errors.Join(errs...)
+}
+
+func parseLogFormat(envVar string, defaultVal string) (string, error) {
+	val := os.Getenv(envVar)
+	if val == "" {
+		return defaultVal, nil
+	}
+	if val != "text" && val != "json" {
+		return "", fmt.Errorf("invalid log format %q, allowed values are: text, json", val)
+	}
+	return val, nil
 }
 
 func parseDurationEnv(envVar string, defaultVal time.Duration) (d time.Duration, err error) {
@@ -96,6 +112,7 @@ type Config struct {
 	ReadTimeout       time.Duration
 	ReadHeaderTimeout time.Duration
 	WriteTimeout      time.Duration
+	LogFormat         string
 	Help              bool
 }
 
@@ -107,21 +124,3 @@ func (c *Config) Validate() error {
 }
 
 var ErrCrtKeyMismatch = fmt.Errorf("-crt and -key must be used together.")
-
-func (c *Config) String() string {
-	var sb strings.Builder
-	sb.WriteString("serve:\n")
-	sb.WriteString(fmt.Sprintf(" - Directory: %s\n", c.Dir))
-	sb.WriteString(fmt.Sprintf(" - Address: %s\n", c.Addr))
-	if c.Crt != "" && c.Key != "" {
-		sb.WriteString(fmt.Sprintf(" - Using TLS with crt: %q and key: %q\n", c.Crt, c.Key))
-	}
-	if c.LogRemoteAddr {
-		sb.WriteString(" - Log remote address: true\n")
-	}
-	sb.WriteString(fmt.Sprintf(" - Read-only: %t\n", c.ReadOnly))
-	if c.Auth != "" {
-		sb.WriteString(" - Basic auth: enabled\n")
-	}
-	return sb.String()
-}

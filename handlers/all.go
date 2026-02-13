@@ -2,18 +2,19 @@ package handlers
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/a-h/serve/config"
 )
 
-func Create(conf *config.Config) (h http.Handler, closer func() error, err error) {
-	handler, closer, err := NewFileHandler(conf.Dir, conf.ReadOnly)
+func Create(log *slog.Logger, conf *config.Config) (h http.Handler, closer func() error, err error) {
+	handler, closer, err := NewFileHandler(log, conf.Dir, conf.ReadOnly)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create file handler: %w", err)
 	}
-	withLogging := NewLoggingMiddleware(conf.LogRemoteAddr, handler)
+	withLogging := NewLoggingMiddleware(log, conf.LogRemoteAddr, handler)
 	if conf.Auth != "" {
 		parts := strings.SplitN(conf.Auth, ":", 2)
 		if len(parts) != 2 {

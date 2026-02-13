@@ -29,6 +29,8 @@ serve --help
     Print help.
 -key string
     Path to key file for TLS. (Env: SERVE_KEY)
+-log-format string
+    Log format: text or json. (Env: SERVE_LOG_FORMAT) (default "text")
 -log-remote-addr
     Log remote address. (Env: SERVE_LOG_REMOTE_ADDR)
 -read-header-timeout duration

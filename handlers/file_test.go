@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"io"
+	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -28,7 +29,8 @@ func TestFileHandler(t *testing.T) {
 	}
 
 	// Create a new FileHandler, in read only mode.
-	fh, closer, err := NewFileHandler(dir, true)
+	log := slog.New(slog.DiscardHandler)
+	fh, closer, err := NewFileHandler(log, dir, true)
 	if err != nil {
 		t.Fatalf("Failed to create FileHandler: %v", err)
 	}

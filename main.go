@@ -2,7 +2,7 @@ package main
 
 import (
 	"crypto/tls"
-	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -15,7 +15,7 @@ import (
 func main() {
 	conf, err := config.New()
 	if err != nil {
-		fmt.Printf("Error parsing config: %v\n", err)
+		slog.Error("Error parsing config", slog.Any("error", err))
 		os.Exit(1)
 	}
 
@@ -24,14 +24,16 @@ func main() {
 		return
 	}
 
+	log := createLogger(conf.LogFormat)
+
 	if err = conf.Validate(); err != nil {
-		fmt.Println(err.Error())
+		log.Error("Invalid configuration", slog.Any("error", err))
 		os.Exit(1)
 	}
 
-	handler, closer, err := handlers.Create(conf)
+	handler, closer, err := handlers.Create(log, conf)
 	if err != nil {
-		fmt.Printf("Error creating handler: %v\n", err)
+		log.Error("Error creating handler", slog.Any("error", err))
 		os.Exit(1)
 	}
 	defer closer()
@@ -54,21 +56,21 @@ func main() {
 		// Check that we're not attempting to serve the key and crt files.
 		absCrt, err := filepath.Abs(conf.Crt)
 		if err != nil {
-			fmt.Printf("Failed to get absolute path of %q: %v\n", conf.Crt, err)
+			log.Error("Failed to get absolute path of crt file", slog.String("crt", conf.Crt), slog.Any("error", err))
 			os.Exit(1)
 		}
 		absKey, err := filepath.Abs(conf.Key)
 		if err != nil {
-			fmt.Printf("Failed to get absolute path of %q: %v\n", conf.Key, err)
+			log.Error("Failed to get absolute path of key file", slog.String("key", conf.Key), slog.Any("error", err))
 			os.Exit(1)
 		}
 		absDir, err := filepath.Abs(conf.Dir)
 		if err != nil {
-			fmt.Printf("Failed to get absolute path of %q: %v\n", conf.Dir, err)
+			log.Error("Failed to get absolute path of serve directory", slog.String("dir", conf.Dir), slog.Any("error", err))
 			os.Exit(1)
 		}
 		if strings.HasPrefix(absCrt, absDir) || strings.HasPrefix(absKey, absDir) {
-			fmt.Println("Error: -crt and -key must not be in the directory being served.")
+			log.Error("Certificate and key files must not be in the directory being served", slog.String("crt", conf.Crt), slog.String("key", conf.Key), slog.String("dir", conf.Dir))
 			os.Exit(1)
 		}
 		// Switch to TLS mode.
@@ -77,9 +79,17 @@ func main() {
 		}
 	}
 
-	fmt.Print(conf.String())
+	log.Info("Starting server", slog.String("dir", conf.Dir), slog.String("addr", conf.Addr), slog.Bool("tls", serveTLS), slog.Bool("log-remote-addr", conf.LogRemoteAddr), slog.Bool("read-only", conf.ReadOnly), slog.Bool("auth-enabled", conf.Auth != ""))
+
 	if err := listen(); err != nil {
-		fmt.Printf("Error: %v\n", err)
+		log.Error("Server error", slog.Any("error", err))
 		os.Exit(1)
 	}
+}
+
+func createLogger(logFormat string) *slog.Logger {
+	if logFormat == "json" {
+		return slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	}
+	return slog.New(slog.NewTextHandler(os.Stdout, nil))
 }

@@ -3,14 +3,16 @@ package handlers
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path"
 	"strings"
 )
 
-func NewFileHandler(dir string, readOnly bool) (fh *FileHandler, closer func() error, err error) {
+func NewFileHandler(log *slog.Logger, dir string, readOnly bool) (fh *FileHandler, closer func() error, err error) {
 	fh = &FileHandler{
+		Log:        log,
 		IsReadOnly: readOnly,
 		fileServer: http.FileServer(http.Dir(dir)),
 	}
@@ -25,6 +27,7 @@ func NewFileHandler(dir string, readOnly bool) (fh *FileHandler, closer func() e
 }
 
 type FileHandler struct {
+	Log              *slog.Logger
 	IsReadOnly       bool
 	fileServer       http.Handler
 	rootedFileSystem *os.Root
@@ -74,13 +77,13 @@ func (h *FileHandler) Put(w http.ResponseWriter, r *http.Request) {
 	// Create the file.
 	err := h.rootedFileSystem.MkdirAll(path.Dir(cleaned), 0755)
 	if err != nil {
-		fmt.Printf(" - failed to create directories: %v\n", err)
+		h.Log.Error("Failed to create directories for file", slog.String("path", cleaned), slog.Any("error", err))
 		http.Error(w, "failed to create file", http.StatusInternalServerError)
 		return
 	}
 	f, err := h.rootedFileSystem.Create(cleaned)
 	if err != nil {
-		fmt.Printf(" - failed to create file: %v\n", err)
+		h.Log.Error("Failed to create file", slog.String("path", cleaned), slog.Any("error", err))
 		http.Error(w, "failed to create file", http.StatusInternalServerError)
 		return
 	}
@@ -89,14 +92,14 @@ func (h *FileHandler) Put(w http.ResponseWriter, r *http.Request) {
 	// Read the file content from the request body.
 	reader, err := h.getReader(r)
 	if err != nil {
-		fmt.Printf(" - failed to get file reader: %v\n", err)
+		h.Log.Error("Failed to get file reader", slog.Any("error", err))
 		http.Error(w, "failed to read file content", http.StatusBadRequest)
 		return
 	}
 
 	_, err = f.ReadFrom(reader)
 	if err != nil {
-		fmt.Printf(" - failed to write file: %v\n", err)
+		h.Log.Error("Failed to write file content", slog.String("path", cleaned), slog.Any("error", err))
 		http.Error(w, "failed to write file", http.StatusInternalServerError)
 		return
 	}
@@ -134,9 +137,10 @@ func (h *FileHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	err := h.rootedFileSystem.Remove(h.cleanPath(r.URL.Path))
+	cleaned := h.cleanPath(r.URL.Path)
+	err := h.rootedFileSystem.Remove(cleaned)
 	if err != nil {
-		fmt.Printf(" - failed to delete file: %v\n", err)
+		h.Log.Error("Failed to delete file", slog.String("path", cleaned), slog.Any("error", err))
 		http.Error(w, "failed to delete file", http.StatusInternalServerError)
 		return
 	}
