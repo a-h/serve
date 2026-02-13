@@ -75,7 +75,7 @@ Interactive: true
 ```bash
 nix build .#image
 gunzip -c result > serve.tar
-skopeo copy serve.tar docker://ghcr.io/a-h/serve:latest
+skopeo copy docker-archive:serve.tar docker://ghcr.io/a-h/serve:latest
 ```
 
 ### file-upload
