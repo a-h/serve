@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/a-h/serve/handlers"
 )
 
 var flagDir = flag.String("dir", ".", "Directory to serve.")
@@ -17,6 +19,8 @@ var flagCrt = flag.String("crt", "", "Path to crt file.")
 var flagKey = flag.String("key", "", "Path to key file.")
 var flagRemoteAddr = flag.Bool("remote-addr", false, "Log remote address.")
 var flagHelp = flag.Bool("help", false, "Print help.")
+var flagWritable = flag.Bool("writable", false, "Allow POST, PUT, DELETE methods.")
+var flagAuth = flag.String("auth", "", "Username:Password for basic auth, no auth if not set.")
 
 func main() {
 	flag.Parse()
@@ -29,23 +33,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	fs := http.FileServer(http.Dir(*flagDir))
+	handler, closer, err := handlers.Create(*flagDir, *flagRemoteAddr, *flagWritable, *flagAuth)
+	if err != nil {
+		fmt.Printf("Error creating handler: %v\n", err)
+		os.Exit(1)
+	}
+	defer closer()
+
 	server := &http.Server{
-		Addr: *flagAddr,
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			var sb strings.Builder
-			sb.WriteString(time.Now().Format(time.RFC3339))
-			sb.WriteString(" ")
-			sb.WriteString(r.Method)
-			sb.WriteString(" ")
-			sb.WriteString(r.URL.String())
-			if *flagRemoteAddr {
-				sb.WriteString(" ")
-				sb.WriteString(r.RemoteAddr)
-			}
-			fmt.Println(sb.String())
-			fs.ServeHTTP(w, r)
-		}),
+		Addr:           *flagAddr,
+		Handler:        handler,
 		ReadTimeout:    5 * time.Second,
 		WriteTimeout:   10 * time.Second,
 		MaxHeaderBytes: 1 << 20,
