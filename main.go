@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/a-h/serve/config"
 	"github.com/a-h/serve/handlers"
@@ -38,11 +37,12 @@ func main() {
 	defer closer()
 
 	server := &http.Server{
-		Addr:           conf.Addr,
-		Handler:        handler,
-		ReadTimeout:    5 * time.Second,
-		WriteTimeout:   10 * time.Second,
-		MaxHeaderBytes: 1 << 20,
+		Addr:              conf.Addr,
+		Handler:           handler,
+		ReadTimeout:       conf.ReadTimeout,
+		ReadHeaderTimeout: conf.ReadHeaderTimeout,
+		WriteTimeout:      conf.WriteTimeout,
+		MaxHeaderBytes:    1 << 20,
 		TLSConfig: &tls.Config{
 			MinVersion: tls.VersionTLS12,
 		},

@@ -31,8 +31,14 @@ serve --help
     Path to key file for TLS. (Env: SERVE_KEY)
 -log-remote-addr
     Log remote address. (Env: SERVE_LOG_REMOTE_ADDR)
+-read-header-timeout duration
+    Amount of time allowed to read request headers. (Env: SERVE_READ_HEADER_TIMEOUT) (default 5s)
 -read-only
     Allow only GET and HEAD requests. (Env: SERVE_READ_ONLY) (default true)
+-read-timeout duration
+    Maximum duration for reading the entire request, including the body. (Env: SERVE_READ_TIMEOUT) (default 24h0m0s)
+-write-timeout duration
+    Maximum duration before timing out writes of the response. (Env: SERVE_WRITE_TIMEOUT) (default 12h0m0s)
 ```
 
 ## Tasks
