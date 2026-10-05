@@ -3,12 +3,14 @@ package main
 import (
 	"crypto/tls"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/a-h/serve/config"
+	"github.com/a-h/serve/endpoints"
 	"github.com/a-h/serve/handlers"
 )
 
@@ -49,7 +51,8 @@ func main() {
 			MinVersion: tls.VersionTLS12,
 		},
 	}
-	listen := server.ListenAndServe
+	scheme := "http"
+	serve := server.Serve
 
 	serveTLS := conf.Crt != "" && conf.Key != ""
 	if serveTLS {
@@ -74,14 +77,29 @@ func main() {
 			os.Exit(1)
 		}
 		// Switch to TLS mode.
-		listen = func() error {
-			return server.ListenAndServeTLS(conf.Crt, conf.Key)
+		scheme = "https"
+		serve = func(ln net.Listener) error {
+			return server.ServeTLS(ln, conf.Crt, conf.Key)
 		}
+	}
+
+	ln, err := net.Listen("tcp", conf.Addr)
+	if err != nil {
+		log.Error("Failed to listen", slog.String("addr", conf.Addr), slog.Any("error", err))
+		os.Exit(1)
 	}
 
 	log.Info("Starting server", slog.String("dir", conf.Dir), slog.String("addr", conf.Addr), slog.Bool("tls", serveTLS), slog.Bool("log-remote-addr", conf.LogRemoteAddr), slog.Bool("read-only", conf.ReadOnly), slog.Bool("auth-enabled", conf.Auth != ""))
 
-	if err := listen(); err != nil {
+	listening, err := endpoints.Get(scheme, ln.Addr().(*net.TCPAddr))
+	if err != nil {
+		log.Warn("Failed to list endpoints", slog.Any("error", err))
+	}
+	for _, e := range listening {
+		log.Info("Listening", slog.String("url", e.URL), slog.String("interface", e.Interface))
+	}
+
+	if err := serve(ln); err != nil {
 		log.Error("Server error", slog.Any("error", err))
 		os.Exit(1)
 	}
